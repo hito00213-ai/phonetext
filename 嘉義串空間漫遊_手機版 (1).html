@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>嘉義串 — 空間漫遊</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --ink: #1a1410;
+    --cream: #f5f0e8;
+    --rust: #b5451b;
+    --warm: #d4a96a;
+    --glass: rgba(20,16,12,0.75);
+  }
+
+  body {
+    background: var(--ink);
+    color: var(--cream);
+    font-family: 'Noto Sans TC', 'PingFang TC', sans-serif;
+    overflow: hidden;
+    height: 100dvh;
+    touch-action: none;
+  }
+
+  /* ── LOAD SCREEN ── */
+  #screen-load {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: var(--ink);
+    z-index: 100;
+    padding: 24px;
+  }
+
+  .brand {
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--warm);
+    margin-bottom: 24px;
+    opacity: 0.7;
+  }
+
+  .title-main {
+    font-size: clamp(28px, 8vw, 48px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .title-sub {
+    font-size: 13px;
+    color: var(--warm);
+    letter-spacing: 0.1em;
+    margin-bottom: 36px;
+  }
+
+  .upload-zone {
+    border: 1px solid rgba(212,169,106,0.35);
+    border-radius: 4px;
+    padding: 28px 24px;
+    text-align: center;
+    cursor: pointer;
+    width: 100%;
+    max-width: 380px;
+  }
+  .upload-zone.drag { border-color: var(--warm); background: rgba(212,169,106,0.05); }
+
+  .upload-icon { width: 40px; height: 40px; margin: 0 auto 12px; opacity: 0.5; }
+
+  .upload-label { font-size: 14px; margin-bottom: 6px; }
+
+  .upload-hint { font-size: 11px; color: rgba(245,240,232,0.4); line-height: 1.6; }
+
+  #file-input { display: none; }
+
+  .file-list {
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--warm);
+    text-align: left;
+    max-height: 80px;
+    overflow-y: auto;
+    line-height: 1.8;
+  }
+
+  .btn-enter {
+    margin-top: 24px;
+    padding: 16px 0;
+    background: var(--rust);
+    color: var(--cream);
+    border: none;
+    border-radius: 2px;
+    font-size: 15px;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    width: 100%;
+    max-width: 380px;
+    display: none;
+  }
+  .btn-enter.visible { display: block; }
+
+  #progress-bar {
+    width: 100%; max-width: 380px;
+    height: 2px;
+    background: rgba(212,169,106,0.2);
+    margin-top: 20px;
+    display: none;
+  }
+  #progress-fill { height: 100%; background: var(--warm); width: 0%; transition: width 0.3s; }
+  #progress-text {
+    font-size: 11px;
+    color: rgba(245,240,232,0.5);
+    margin-top: 8px;
+    text-align: center;
+    display: none;
+  }
+
+  /* ── 3D CANVAS ── */
+  #canvas-wrap { position: fixed; inset: 0; display: none; }
+  #c { width: 100%; height: 100%; display: block; filter: saturate(1.5); }
+
+  /* ── HUD TOP ── */
+  #hud-top {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: none;
+    padding: 14px 16px;
+    pointer-events: none;
+    z-index: 10;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .hud-brand {
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: rgba(245,240,232,0.45);
+    text-transform: uppercase;
+  }
+
+  /* ── BACK BTN ── */
+  #btn-back {
+    position: fixed;
+    top: 12px; right: 14px;
+    background: var(--glass);
+    border: 1px solid rgba(212,169,106,0.25);
+    color: rgba(245,240,232,0.7);
+    padding: 7px 14px;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    display: none;
+    z-index: 30;
+    border-radius: 2px;
+  }
+
+  /* ── CROSSHAIR ── */
+  #crosshair {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    display: none;
+    z-index: 10;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute; background: rgba(245,240,232,0.5);
+  }
+  #crosshair::before { width: 10px; height: 1px; top: 0; left: -5px; }
+  #crosshair::after  { width: 1px; height: 10px; top: -5px; left: 0; }
+
+  /* ── JOYSTICK (左下) ── */
+  #joystick-wrap {
+    position: fixed;
+    bottom: 36px; left: 28px;
+    display: none;
+    z-index: 20;
+    pointer-events: all;
+  }
+
+  #joystick-base {
+    width: 110px; height: 110px;
+    border-radius: 50%;
+    background: rgba(20,16,12,0.5);
+    border: 1px solid rgba(212,169,106,0.25);
+    position: relative;
+    touch-action: none;
+  }
+
+  #joystick-knob {
+    position: absolute;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: rgba(212,169,106,0.55);
+    border: 1px solid rgba(212,169,106,0.8);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    transition: background 0.1s;
+  }
+
+  .joystick-label {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: rgba(245,240,232,0.3);
+    text-align: center;
+    margin-top: 6px;
+  }
+
+  /* ── LOOK ZONE (右側) ── */
+  #look-zone {
+    position: fixed;
+    top: 0; right: 0;
+    width: 55%; height: 100%;
+    display: none;
+    z-index: 15;
+    touch-action: none;
+  }
+
+  /* ── UP / DOWN BUTTONS (右下) ── */
+  #updown-wrap {
+    position: fixed;
+    bottom: 36px; right: 24px;
+    display: none;
+    z-index: 20;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: all;
+  }
+
+  .updown-btn {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: rgba(20,16,12,0.55);
+    border: 1px solid rgba(212,169,106,0.3);
+    color: rgba(245,240,232,0.75);
+    font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+  }
+  .updown-btn:active { background: rgba(181,69,27,0.4); }
+
+  /* ── LOOK INDICATOR ── */
+  #look-hint {
+    position: fixed;
+    bottom: 160px; right: 0;
+    width: 55%;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: rgba(245,240,232,0.2);
+    pointer-events: none;
+    display: none;
+    z-index: 16;
+  }
+
+  /* ── TOOLTIP ── */
+  #tooltip {
+    position: fixed;
+    bottom: 170px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--glass);
+    border: 1px solid rgba(212,169,106,0.25);
+    padding: 8px 16px;
+    font-size: 11px;
+    pointer-events: none;
+    display: none;
+    z-index: 30;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+<!-- LOAD SCREEN -->
+<div id="screen-load">
+  <p class="brand">CHIAYIHOOD · 嘉喻戶曉文化工作室</p>
+  <h1 class="title-main">嘉義串空間</h1>
+  <p class="title-sub">第一人稱空間漫遊</p>
+
+  <div class="upload-zone" id="drop-zone">
+    <svg class="upload-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M24 32V16M24 16l-7 7M24 16l7 7"/>
+      <rect x="4" y="28" width="40" height="14" rx="2"/>
+      <path d="M8 28v-6a6 6 0 016-6h2"/>
+      <path d="M40 28v-6a6 6 0 00-6-6h-2"/>
+    </svg>
+    <p class="upload-label">點擊選擇模型檔案</p>
+    <p class="upload-hint">
+      請選取全部檔案<br>
+      .obj、.mtl 與所有貼圖（.jpg / .png）
+    </p>
+    <div class="file-list" id="file-list"></div>
+    <input type="file" id="file-input" multiple
+      accept=".obj,.mtl,.jpg,.jpeg,.png,.tiff,.tif">
+  </div>
+
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+  <p id="progress-text">讀取中...</p>
+  <button class="btn-enter" id="btn-enter">進入空間 →</button>
+</div>
+
+<!-- 3D CANVAS -->
+<div id="canvas-wrap"><canvas id="c"></canvas></div>
+
+<!-- HUD -->
+<div id="hud-top" style="display:none;justify-content:flex-start;">
+  <span class="hud-brand">嘉義串 · 空間漫遊</span>
+</div>
+
+<!-- Crosshair -->
+<div id="crosshair"></div>
+
+<!-- Back -->
+<button id="btn-back">退出</button>
+
+<!-- Joystick -->
+<div id="joystick-wrap">
+  <div id="joystick-base">
+    <div id="joystick-knob"></div>
+  </div>
+  <p class="joystick-label">移動</p>
+</div>
+
+<!-- Look zone -->
+<div id="look-zone"></div>
+<p id="look-hint">← 滑動環顧 →</p>
+
+<!-- Up/Down -->
+<div id="updown-wrap">
+  <div class="updown-btn" id="btn-up">↑</div>
+  <div class="updown-btn" id="btn-down">↓</div>
+</div>
+
+<!-- Tooltip -->
+<div id="tooltip"></div>
+
+<!-- Light Panel -->
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ── FILE HANDLING ──────────────────────────────────────────────────
+const dropZone    = document.getElementById('drop-zone');
+const fileInput   = document.getElementById('file-input');
+const fileListEl  = document.getElementById('file-list');
+const btnEnter    = document.getElementById('btn-enter');
+const progressBar  = document.getElementById('progress-bar');
+const progressFill = document.getElementById('progress-fill');
+const progressText = document.getElementById('progress-text');
+
+let fileMap = {};
+let objURL = null, mtlURL = null;
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+
+function handleFiles(files) {
+  fileMap = {}; objURL = mtlURL = null;
+  let names = [];
+  for (const f of files) {
+    const key = f.name.toLowerCase();
+    const url = URL.createObjectURL(f);
+    fileMap[f.name] = url;
+    fileMap[key] = url;
+    names.push(f.name);
+    if (key.endsWith('.obj')) objURL = { url, name: f.name };
+    if (key.endsWith('.mtl')) mtlURL = { url, name: f.name };
+  }
+  fileListEl.innerHTML = names.map(n => {
+    const ext = n.split('.').pop().toUpperCase();
+    const c = { OBJ:'#b5451b', MTL:'#d4a96a', JPG:'#8a9e6a', PNG:'#8a9e6a' }[ext] || '#888';
+    return `<span style="color:${c};margin-right:8px">${n}</span>`;
+  }).join('');
+  if (objURL) btnEnter.classList.add('visible');
+  else fileListEl.innerHTML += '<br><span style="color:#c06060">⚠ 未找到 .obj 檔</span>';
+}
+
+btnEnter.addEventListener('click', startViewer);
+
+// ── PARSERS ───────────────────────────────────────────────────────
+async function parseMTL(text) {
+  const materials = {};
+  let cur = null;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const [kw, ...rest] = line.split(/\s+/);
+    const val = rest.join(' ');
+    if (kw === 'newmtl') { cur = val; materials[cur] = { Kd:[1,1,1], Ka:[0,0,0], Ks:[0,0,0], Ns:10, d:1, map_Kd:null }; }
+    else if (!cur) continue;
+    else if (kw === 'Kd') materials[cur].Kd = rest.map(Number);
+    else if (kw === 'Ka') materials[cur].Ka = rest.map(Number);
+    else if (kw === 'Ks') materials[cur].Ks = rest.map(Number);
+    else if (kw === 'Ns') materials[cur].Ns = parseFloat(val);
+    else if (kw === 'd')  materials[cur].d  = parseFloat(val);
+    else if (kw === 'map_Kd') materials[cur].map_Kd = val;
+  }
+  return materials;
+}
+
+async function loadTexture(filename) {
+  if (!filename) return null;
+  const url = fileMap[filename] || fileMap[filename.toLowerCase()];
+  if (!url) return null;
+  return new Promise(resolve => {
+    new THREE.TextureLoader().load(url, tex => {
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping; resolve(tex);
+    }, undefined, () => resolve(null));
+  });
+}
+
+function buildThreeMaterial(mdef, tex) {
+  const [r,g,b] = mdef.Kd;
+  const isT = mdef.d < 0.99;
+  const mat = new THREE.MeshPhongMaterial({
+    color: new THREE.Color(r,g,b), specular: new THREE.Color(...mdef.Ks),
+    shininess: mdef.Ns, map: tex||null, transparent: isT, opacity: mdef.d, side: THREE.DoubleSide,
+  });
+  if (isT) mat.depthWrite = false;
+  return mat;
+}
+
+async function parseOBJ(text) {
+  const lines = text.split(/\r?\n/);
+  const pos=[], uvs=[], nrm=[], groups={};
+  let cur = '__default__';
+  const getG = m => { if (!groups[m]) groups[m]={pos:[],uv:[],norm:[],hasUV:false,hasNorm:false}; return groups[m]; };
+  const fv = tok => { const p=tok.split('/'); return { pi:parseInt(p[0])-1, ti:p[1]?parseInt(p[1])-1:-1, ni:p[2]?parseInt(p[2])-1:-1 }; };
+  let total=lines.length, step=Math.max(1,Math.floor(total/100)), idx=0;
+  for (const raw of lines) {
+    idx++;
+    if (idx%step===0) { progressFill.style.width=(30+60*(idx/total))+'%'; await new Promise(r=>setTimeout(r,0)); }
+    const line=raw.trim(); if(!line||line[0]==='#') continue;
+    const pts=line.split(/\s+/), kw=pts[0];
+    if (kw==='v')  { pos.push(parseFloat(pts[1]),parseFloat(pts[2]),parseFloat(pts[3])); }
+    else if (kw==='vt') { uvs.push(parseFloat(pts[1]),parseFloat(pts[2])); }
+    else if (kw==='vn') { nrm.push(parseFloat(pts[1]),parseFloat(pts[2]),parseFloat(pts[3])); }
+    else if (kw==='usemtl') { cur=pts.slice(1).join(' '); }
+    else if (kw==='f') {
+      const vs=pts.slice(1).map(fv);
+      for (let i=1;i<vs.length-1;i++) {
+        const tri=[vs[0],vs[i],vs[i+1]], g=getG(cur);
+        for (const v of tri) {
+          g.pos.push(pos[v.pi*3],pos[v.pi*3+1],pos[v.pi*3+2]);
+          if(v.ti>=0){g.uv.push(uvs[v.ti*2],uvs[v.ti*2+1]);g.hasUV=true;}else g.uv.push(0,0);
+          if(v.ni>=0){g.norm.push(nrm[v.ni*3],nrm[v.ni*3+1],nrm[v.ni*3+2]);g.hasNorm=true;}else g.norm.push(0,1,0);
+        }
+      }
+    }
+  }
+  return groups;
+}
+
+// ── MAIN VIEWER ────────────────────────────────────────────────────
+async function startViewer() {
+  btnEnter.style.display='none';
+  progressBar.style.display='block';
+  progressText.style.display='block';
+  progressFill.style.width='5%';
+  progressText.textContent='讀取 MTL 材質...';
+
+  let matDefs={};
+  if (mtlURL) { const t=await fetch(mtlURL.url).then(r=>r.text()); progressFill.style.width='15%'; matDefs=await parseMTL(t); }
+
+  progressText.textContent='讀取 OBJ 幾何...';
+  progressFill.style.width='20%';
+  const objText=await fetch(objURL.url).then(r=>r.text());
+  progressFill.style.width='30%';
+  progressText.textContent='解析幾何資料...';
+  const groups=await parseOBJ(objText);
+  progressFill.style.width='90%';
+  progressText.textContent='載入貼圖...';
+
+  const texCache={};
+  for (const [mn,md] of Object.entries(matDefs)) {
+    if (md.map_Kd && !texCache[md.map_Kd]) texCache[md.map_Kd]=await loadTexture(md.map_Kd);
+  }
+
+  progressFill.style.width='96%';
+  progressText.textContent='建立 3D 場景...';
+
+  // ── THREE ──
+  const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.setSize(window.innerWidth,window.innerHeight);
+  renderer.outputEncoding=THREE.sRGBEncoding;
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure=0.7;
+
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x1a1410);
+  scene.fog=new THREE.FogExp2(0x1a1410,0.0008);
+
+  const camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,1,8000);
+
+  // Build meshes
+  let totalVerts=0;
+  const defaultMat=new THREE.MeshPhongMaterial({color:0xddccbb,side:THREE.DoubleSide});
+  const meshes=[];
+
+  for (const [mname,g] of Object.entries(groups)) {
+    if (!g.pos.length) continue;
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(g.pos,3));
+    geo.setAttribute('uv',new THREE.Float32BufferAttribute(g.uv,2));
+    geo.setAttribute('normal',new THREE.Float32BufferAttribute(g.norm,3));
+    if (!g.hasNorm) geo.computeVertexNormals();
+    const mdef=matDefs[mname];
+    const mat=mdef ? buildThreeMaterial(mdef, mdef.map_Kd?(texCache[mdef.map_Kd]||null):null) : defaultMat;
+    const mesh=new THREE.Mesh(geo,mat);
+    scene.add(mesh); meshes.push(mesh); totalVerts+=g.pos.length/3;
+  }
+
+  // ── BOUNDING BOX ──
+  const box=new THREE.Box3();
+  for (const m of meshes) box.expandByObject(m);
+  const center=new THREE.Vector3(); box.getCenter(center);
+  const size=new THREE.Vector3(); box.getSize(size);
+  camera.position.set(center.x, box.min.y+size.y*0.5, center.z+size.z*0.3);
+
+  progressFill.style.width='100%';
+  await new Promise(r=>setTimeout(r,400));
+
+  // ── SHOW 3D ──
+  document.getElementById('screen-load').style.display='none';
+  document.getElementById('canvas-wrap').style.display='block';
+  document.getElementById('hud-top').style.display='flex';
+  document.getElementById('crosshair').style.display='block';
+  document.getElementById('btn-back').style.display='block';
+  document.getElementById('joystick-wrap').style.display='block';
+  document.getElementById('look-zone').style.display='block';
+  document.getElementById('look-hint').style.display='block';
+  document.getElementById('updown-wrap').style.display='flex';
+
+  const tooltip=document.getElementById('tooltip');
+  setTimeout(()=>{
+    tooltip.style.display='block';
+    tooltip.textContent=`已載入 ${totalVerts.toLocaleString()} 頂點`;
+    setTimeout(()=>tooltip.style.display='none',4000);
+  },600);
+
+  // ── EULER ──
+  const euler=new THREE.Euler(0,0,0,'YXZ');
+
+  // ── JOYSTICK ──
+  const jBase=document.getElementById('joystick-base');
+  const jKnob=document.getElementById('joystick-knob');
+  const jR=55; // max radius
+  let jTouch=null, jDx=0, jDy=0;
+  const jRect=()=>jBase.getBoundingClientRect();
+
+  jBase.addEventListener('touchstart',e=>{
+    e.preventDefault();
+    jTouch=e.changedTouches[0].identifier;
+    updateJ(e.changedTouches[0]);
+  },{passive:false});
+  document.addEventListener('touchmove',e=>{
+    for (const t of e.changedTouches) if(t.identifier===jTouch){e.preventDefault();updateJ(t);break;}
+  },{passive:false});
+  document.addEventListener('touchend',e=>{
+    for (const t of e.changedTouches) if(t.identifier===jTouch){ jTouch=null; jDx=0; jDy=0; jKnob.style.transform='translate(-50%,-50%)'; break; }
+  });
+
+  function updateJ(t) {
+    const r=jRect();
+    let dx=t.clientX-(r.left+r.width/2);
+    let dy=t.clientY-(r.top+r.height/2);
+    const dist=Math.hypot(dx,dy);
+    if(dist>jR){dx=dx/dist*jR;dy=dy/dist*jR;}
+    jDx=dx/jR; jDy=dy/jR;
+    jKnob.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  }
+
+  // ── LOOK ZONE (right side swipe) ──
+  const lookZone=document.getElementById('look-zone');
+  let lookTouch=null, lookLastX=0;
+
+  lookZone.addEventListener('touchstart',e=>{
+    e.preventDefault();
+    if(lookTouch===null){lookTouch=e.changedTouches[0].identifier; lookLastX=e.changedTouches[0].clientX;}
+  },{passive:false});
+  lookZone.addEventListener('touchmove',e=>{
+    e.preventDefault();
+    for(const t of e.changedTouches){
+      if(t.identifier===lookTouch){
+        const dx=t.clientX-lookLastX;
+        euler.y-=dx*0.005;
+        euler.x=0;
+        camera.quaternion.setFromEuler(euler);
+        lookLastX=t.clientX;
+        break;
+      }
+    }
+  },{passive:false});
+  lookZone.addEventListener('touchend',e=>{
+    for(const t of e.changedTouches) if(t.identifier===lookTouch){lookTouch=null;break;}
+  });
+
+  // ── UP / DOWN ──
+  let goingUp=false, goingDown=false;
+  const btnUp=document.getElementById('btn-up');
+  const btnDown=document.getElementById('btn-down');
+  btnUp.addEventListener('touchstart',e=>{e.preventDefault();goingUp=true;},{passive:false});
+  btnUp.addEventListener('touchend',()=>goingUp=false);
+  btnDown.addEventListener('touchstart',e=>{e.preventDefault();goingDown=true;},{passive:false});
+  btnDown.addEventListener('touchend',()=>goingDown=false);
+
+  // ── KEYBOARD (desktop fallback) ──
+  const keys={};
+  document.addEventListener('keydown',e=>{keys[e.code]=true;});
+  document.addEventListener('keyup',e=>{keys[e.code]=false;});
+
+  // ── MOVEMENT ──
+  const up=new THREE.Vector3(0,1,0);
+  const vel=new THREE.Vector3();
+  const right=new THREE.Vector3();
+
+  function moveCamera(dt) {
+    const speed=90;
+    let fwd=0, strafe=0, vert=0;
+
+    // Joystick
+    fwd  -= jDy; // joystick Y → forward/back
+    strafe+=jDx; // joystick X → strafe
+
+    // Up/down buttons
+    if(goingUp)   vert+=1;
+    if(goingDown) vert-=1;
+
+    // Keyboard fallback
+    if(keys['ArrowUp']||keys['KeyW'])    fwd+=1;
+    if(keys['ArrowDown']||keys['KeyS'])  fwd-=1;
+    if(keys['ArrowLeft'])  strafe-=1;
+    if(keys['ArrowRight']) strafe+=1;
+    if(keys['KeyA']||keys['Space']) vert+=1;
+    if(keys['KeyD']||keys['KeyC'])  vert-=1;
+
+    const forward=new THREE.Vector3(-Math.sin(euler.y),0,-Math.cos(euler.y));
+    right.crossVectors(forward,up).normalize();
+
+    vel.set(0,0,0);
+    vel.addScaledVector(forward,fwd*speed*dt);
+    vel.addScaledVector(right,strafe*speed*dt);
+    vel.y+=vert*speed*dt;
+    camera.position.add(vel);
+
+    const pad=50;
+    camera.position.x=Math.max(box.min.x-pad,Math.min(box.max.x+pad,camera.position.x));
+    camera.position.y=Math.max(box.min.y+20,Math.min(box.max.y+200,camera.position.y));
+    camera.position.z=Math.max(box.min.z-pad,Math.min(box.max.z+pad,camera.position.z));
+  }
+
+  // ── RENDER LOOP ──
+  let last=performance.now();
+  function loop() {
+    requestAnimationFrame(loop);
+    const now=performance.now();
+    moveCamera(Math.min((now-last)*0.001,0.05));
+    last=now;
+    renderer.render(scene,camera);
+  }
+  loop();
+
+  window.addEventListener('resize',()=>{
+    camera.aspect=window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth,window.innerHeight);
+  });
+
+  document.getElementById('btn-back').addEventListener('click',()=>location.reload());
+}
+</script>
+</body>
+</html>
