@@ -257,36 +257,6 @@
     z-index: 16;
   }
 
-  /* ── LIGHT PANEL ── */
-  #light-panel {
-    position: fixed; right: 0; top: 50%; transform: translateY(-50%);
-    background: rgba(20,16,12,0.92); border: 1px solid rgba(212,169,106,0.28);
-    border-right: none; border-radius: 4px 0 0 4px;
-    padding: 12px 10px; width: 170px; display: none;
-    z-index: 25; pointer-events: all; max-height: 60vh; overflow-y: auto;
-  }
-  #light-panel h3 { font-size: 9px; letter-spacing: 0.25em; color: var(--warm); text-transform: uppercase; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(212,169,106,0.2); }
-  .light-row { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-  .light-row:last-child { border-bottom: none; margin-bottom: 0; }
-  .light-row-top { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
-  .light-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.2); }
-  .light-name { font-size: 11px; color: rgba(245,240,232,0.7); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .light-toggle { width: 28px; height: 14px; background: rgba(255,255,255,0.15); border-radius: 7px; cursor: pointer; position: relative; flex-shrink: 0; border: none; transition: background 0.2s; }
-  .light-toggle.on { background: var(--rust); }
-  .light-toggle::after { content: ''; position: absolute; width: 10px; height: 10px; border-radius: 50%; background: white; top: 2px; left: 2px; transition: left 0.2s; }
-  .light-toggle.on::after { left: 16px; }
-  .light-controls { display: flex; gap: 5px; align-items: center; }
-  .light-controls label { font-size: 9px; color: rgba(245,240,232,0.4); width: 12px; }
-  .light-controls input[type=range] { flex: 1; height: 2px; accent-color: var(--warm); cursor: pointer; }
-  .light-controls input[type=color] { width: 20px; height: 20px; border: none; border-radius: 3px; padding: 1px; cursor: pointer; background: none; }
-  #panel-toggle {
-    position: fixed; right: 170px; top: 50%; transform: translateY(-50%);
-    background: rgba(20,16,12,0.88); border: 1px solid rgba(212,169,106,0.25);
-    border-right: none; color: var(--warm); font-size: 10px; letter-spacing: 0.1em;
-    padding: 10px 5px; cursor: pointer; writing-mode: vertical-rl;
-    border-radius: 4px 0 0 4px; display: none; z-index: 25; pointer-events: all;
-  }
-
   /* ── TOOLTIP ── */
   #tooltip {
     position: fixed;
@@ -326,7 +296,7 @@
     </p>
     <div class="file-list" id="file-list"></div>
     <input type="file" id="file-input" multiple
-      accept=".obj,.mtl,.jpg,.jpeg,.png,.tiff,.tif">
+      accept="*/*">
   </div>
 
   <div id="progress-bar"><div id="progress-fill"></div></div>
@@ -370,10 +340,6 @@
 <div id="tooltip"></div>
 
 <!-- Light Panel -->
-<button id="panel-toggle">燈光</button>
-<div id="light-panel">
-  <h3>燈光控制</h3>
-  <div id="light-list"></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -548,79 +514,6 @@ async function startViewer() {
     const mat=mdef ? buildThreeMaterial(mdef, mdef.map_Kd?(texCache[mdef.map_Kd]||null):null) : defaultMat;
     const mesh=new THREE.Mesh(geo,mat);
     scene.add(mesh); meshes.push(mesh); totalVerts+=g.pos.length/3;
-  }
-
-  // ── LAMP DETECTION ──
-  const LAMP_MATS = {
-    '塑膠 (8)': {color:'#1fff47',label:'綠燈'},
-    '塑膠 (9)': {color:'#f5f521',label:'黃燈'},
-    '塑膠 (10)':{color:'#ff00db',label:'粉紅燈'},
-    '塑膠 (11)':{color:'#005bff',label:'藍燈'},
-    '塑膠 (12)':{color:'#ffbb27',label:'暖黃燈'},
-    '塑膠 (13)':{color:'#ffaf00',label:'橘燈'},
-    '塑膠 (2)': {color:'#ff4b00',label:'橘紅燈'},
-  };
-  const sceneLights=[];
-  for (const [mname,g] of Object.entries(groups)) {
-    const base=mname.replace(/_\d+$/,'');
-    const def=LAMP_MATS[base]||LAMP_MATS[mname];
-    if (!def||!g.pos.length) continue;
-    let cx=0,cy=0,cz=0; const n=g.pos.length/3;
-    for(let i=0;i<g.pos.length;i+=3){cx+=g.pos[i];cy+=g.pos[i+1];cz+=g.pos[i+2];}
-    cx/=n;cy/=n;cz/=n;
-    const colorHex=parseInt(def.color.replace('#',''),16);
-    const pl=new THREE.PointLight(colorHex,0.5,600,2);
-    pl.position.set(cx,cy,cz); scene.add(pl);
-    const mk=new THREE.Mesh(new THREE.SphereGeometry(6,8,8),new THREE.MeshBasicMaterial({color:colorHex}));
-    mk.position.copy(pl.position); scene.add(mk);
-    sceneLights.push({light:pl,marker:mk,label:def.label,colorHex:def.color});
-  }
-
-  // Light panel UI
-  const lightList=document.getElementById('light-list');
-  const panelToggle=document.getElementById('panel-toggle');
-  const lightPanel=document.getElementById('light-panel');
-  const uiLights={};
-  for (const sl of sceneLights) {
-    if (!uiLights[sl.label]) uiLights[sl.label]={lights:[],colorHex:sl.colorHex,items:[]};
-    uiLights[sl.label].lights.push(sl.light);
-    uiLights[sl.label].items.push(sl);
-  }
-  let rowIdx=0;
-  for (const [label,grp] of Object.entries(uiLights)) {
-    const row=document.createElement('div'); row.className='light-row';
-    const top=document.createElement('div'); top.className='light-row-top';
-    const dot=document.createElement('div'); dot.className='light-dot'; dot.style.background=grp.colorHex;
-    const nm=document.createElement('span'); nm.className='light-name'; nm.textContent=label+'×'+grp.lights.length;
-    const tog=document.createElement('button'); tog.className='light-toggle on';
-    tog.addEventListener('click',()=>{
-      const on=tog.classList.toggle('on');
-      grp.lights.forEach(l=>l.visible=on);
-      grp.items.forEach(s=>s.marker.visible=on);
-    });
-    top.appendChild(dot);top.appendChild(nm);top.appendChild(tog);
-    const ctrl=document.createElement('div'); ctrl.className='light-controls';
-    const lbl=document.createElement('label'); lbl.textContent='強';
-    const sl=document.createElement('input'); sl.type='range';sl.min=0;sl.max=3;sl.step=0.05;sl.value=0.5;
-    sl.addEventListener('input',()=>grp.lights.forEach(l=>l.intensity=parseFloat(sl.value)));
-    const cp=document.createElement('input'); cp.type='color'; cp.value=grp.colorHex;
-    cp.addEventListener('input',()=>{
-      const hex=parseInt(cp.value.replace('#',''),16);
-      dot.style.background=cp.value;
-      grp.lights.forEach(l=>l.color.setHex(hex));
-      grp.items.forEach(s=>s.marker.material.color.setHex(hex));
-    });
-    ctrl.appendChild(lbl);ctrl.appendChild(sl);ctrl.appendChild(cp);
-    row.appendChild(top);row.appendChild(ctrl);lightList.appendChild(row);rowIdx++;
-  }
-  if (rowIdx>0) {
-    panelToggle.style.display='block'; lightPanel.style.display='block';
-    let open=true;
-    panelToggle.addEventListener('click',()=>{
-      open=!open;
-      lightPanel.style.display=open?'block':'none';
-      panelToggle.style.right=open?'170px':'0';
-    });
   }
 
   // ── BOUNDING BOX ──
