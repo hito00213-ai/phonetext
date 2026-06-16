@@ -496,6 +496,12 @@ async function startViewer() {
   scene.background=new THREE.Color(0x1a1410);
   scene.fog=new THREE.FogExp2(0x1a1410,0.0008);
 
+  const ambient=new THREE.AmbientLight(0xfff5e0,0.4);
+  scene.add(ambient);
+  const sun=new THREE.DirectionalLight(0xfff0cc,0.9);
+  sun.position.set(200,600,300);
+  scene.add(sun);
+
   const camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,1,8000);
 
   // Build meshes
